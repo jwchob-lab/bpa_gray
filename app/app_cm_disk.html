@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="ko" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BPA : DISK Forecast System</title>
+
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght@100..700&display=swap" rel="stylesheet"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+
+    <script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "surface": "#f9f9fb",
+              "on-surface": "#2d3338",
+              "primary": "#5f5e5f",
+              "on-primary": "#faf7f8",
+              "outline-variant": "#acb3b8",
+              "surface-container-low": "#f2f4f6",
+              "surface-container-lowest": "#ffffff"
+            },
+            fontFamily: { "body": ["Inter", "Pretendard", "sans-serif"] }
+          }
+        }
+      }
+    </script>
+
+    <style>
+        body { font-family: 'Pretendard', sans-serif; }
+        .custom-scroll::-webkit-scrollbar { width: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #dde3e9; border-radius: 10px; }
+        .drop-zone.dragover { border-color: #5f5e5f; background: #ebeef2; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface p-8 custom-scroll">
+
+    <!-- 헤더 영역 -->
+    <div class="mb-10 animate-[fadeIn_0.5s]">
+        <h1 class="text-2xl font-bold tracking-tight text-on-surface">Disk Capacity Forecast</h1>
+        <p class="text-sm text-on-surface/50 mt-1 uppercase tracking-widest font-medium">Predictive Storage Maintenance System</p>
+    </div>
+
+    <div class="max-w-5xl space-y-6">
+        <!-- 01. 설정 카드 -->
+        <div class="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-6 shadow-sm">
+            <h2 class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary/60 mb-6">01. System Configuration</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="space-y-2">
+                    <label class="text-[11px] font-bold text-on-surface/60 uppercase tracking-wider">Total Disk (GB)</label>
+                    <input type="number" id="totalDisk" class="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20" placeholder="ex) 1000">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[11px] font-bold text-on-surface/60 uppercase tracking-wider">Threshold (%)</label>
+                    <input type="number" id="threshold" class="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20" value="90">
+                </div>
+                <div class="space-y-2">
+                    <label class="text-[11px] font-bold text-on-surface/60 uppercase tracking-wider">Unit</label>
+                    <input type="text" id="unitLabel" class="w-full bg-surface-container-low border-none rounded-lg text-sm focus:ring-2 focus:ring-primary/20" value="월">
+                </div>
+            </div>
+        </div>
+
+        <!-- 02. 데이터 입력 카드 -->
+        <div class="bg-surface-container-lowest border border-outline-variant/30 rounded-xl p-6 shadow-sm">
+            <h2 class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary/60 mb-6">02. Data Entry</h2>
+            <div id="dropZone" class="relative border-2 border-dashed border-outline-variant/40 rounded-xl p-8 text-center transition-all hover:bg-surface-container-low mb-4">
+                <input type="file" id="fileInput" class="absolute inset-0 opacity-0 cursor-pointer">
+                <span class="material-symbols-outlined text-primary/40 text-4xl mb-2">cloud_upload</span>
+                <p class="text-sm text-on-surface/60">파일을 드래그하거나 클릭하여 업로드</p>
+            </div>
+            <textarea id="dataInput" class="w-full bg-surface-container-low border-none rounded-xl p-4 text-sm font-mono min-h-[120px] focus:ring-2 focus:ring-primary/20" placeholder="날짜, 사용량(GB) 형식"></textarea>
+        </div>
+
+        <button onclick="runAnalysis()" class="w-full py-4 bg-primary text-on-primary rounded-xl font-bold text-sm tracking-widest uppercase hover:opacity-90 transition-all shadow-lg shadow-primary/20">
+            예측 분석 실행
+        </button>
+
+        <!-- 결과 리포트 (차트 말풍선 포함 버전) -->
+        <div id="resultCard" class="hidden bg-surface-container-lowest border border-outline-variant/30 rounded-xl overflow-hidden shadow-sm">
+            <div class="p-6 border-b border-outline-variant/20 flex justify-between items-center bg-surface-container-low/50">
+                <h2 class="text-[10px] font-bold uppercase tracking-[0.2em] text-primary/60">Analysis Report</h2>
+                <span id="resultMeta" class="text-[10px] font-mono text-on-surface/40"></span>
+            </div>
+
+            <div id="summaryBadges" class="grid grid-cols-2 md:grid-cols-4 gap-4 p-6">
+                <!-- 동적 생성 -->
+            </div>
+
+            <div class="p-6">
+                <canvas id="myChart" style="width:100%; height:450px;"></canvas>
+            </div>
+
+            <div class="p-4 bg-surface-container-low/30 border-t border-outline-variant/20 flex justify-end gap-2">
+                <button onclick="downloadCSV()" class="px-4 py-2 text-[11px] font-bold text-on-surface/60">CSV</button>
+                <button onclick="downloadPNG()" class="px-4 py-2 bg-on-surface text-white text-[11px] font-bold rounded-lg">IMAGE</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+/* ====================================
+   핵심 분석 및 차트 로직 (최초 소스 기반)
+==================================== */
+let chartInstance = null;
+let lastParsed = null;
+
+const dz = document.getElementById("dropZone");
+dz.addEventListener("dragover", e => { e.preventDefault(); dz.classList.add("dragover"); });
+dz.addEventListener("dragleave", () => dz.classList.remove("dragover"));
+dz.addEventListener("drop", e => {
+    e.preventDefault(); dz.classList.remove("dragover");
+    if(e.dataTransfer.files[0]) readFile(e.dataTransfer.files[0]);
+});
+document.getElementById("fileInput").addEventListener("change", e => {
+    if(e.target.files[0]) readFile(e.target.files[0]);
+});
+
+function readFile(file) {
+    const reader = new FileReader();
+    reader.onload = e => { document.getElementById("dataInput").value = e.target.result.trim(); };
+    reader.readAsText(file, "utf-8");
+}
+
+function parseData(raw) {
+    const lines = raw.trim().split(/\n/);
+    const labels = [], values = [];
+    lines.forEach(l => {
+        const p = l.split(/[,\t]+/).map(i => i.trim());
+        if (p.length >= 2) {
+            const v = parseFloat(p[1].replace(/[^\d.-]/g, ""));
+            if (!isNaN(v)) { labels.push(p[0]); values.push(v); }
+        }
+    });
+    if (values.length < 2) throw new Error("데이터 부족");
+    return { labels, values };
+}
+
+function linearRegression(values) {
+    const n = values.length;
+    const xs = values.map((_, i) => i);
+    const sumX = xs.reduce((a, b) => a + b, 0);
+    const sumY = values.reduce((a, b) => a + b, 0);
+    const sumXY = xs.reduce((a, x, i) => a + x * values[i], 0);
+    const sumX2 = xs.reduce((a, x) => a + x * x, 0);
+    const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX ** 2);
+    const intercept = (sumY - slope * sumX) / n;
+    return { slope, intercept };
+}
+
+function runAnalysis() {
+    try {
+        const raw = document.getElementById("dataInput").value;
+        const totalDisk = parseFloat(document.getElementById("totalDisk").value);
+        const threshold = parseFloat(document.getElementById("threshold").value) || 90;
+        const unitLabel = document.getElementById("unitLabel").value || "월";
+
+        const { labels, values } = parseData(raw);
+        const { slope, intercept } = linearRegression(values);
+
+        const warnGB = totalDisk ? totalDisk * (threshold / 100) : null;
+        const fullGB = totalDisk ? totalDisk : null;
+
+        const predLabels = [...labels];
+        const predValues = [];
+        let exhaustIdxWarn = null, exhaustLabelWarn = null;
+        let exhaustIdxFull = null, exhaustLabelFull = null;
+
+        for (let i = values.length; i < values.length + 24; i++) {
+            const predicted = intercept + slope * i;
+            const pLabel = `+${i - values.length + 1}${unitLabel}`;
+            predLabels.push(pLabel);
+            predValues.push(predicted);
+
+            if (warnGB && exhaustIdxWarn === null && predicted >= warnGB) {
+                exhaustIdxWarn = i; exhaustLabelWarn = pLabel;
+            }
+            if (fullGB && exhaustIdxFull === null && predicted >= fullGB) {
+                exhaustIdxFull = i; exhaustLabelFull = pLabel;
+            }
+            if (exhaustIdxFull !== null && i > exhaustIdxFull + 3) break;
+        }
+
+        lastParsed = { labels, values, predLabels, predValues, slope, intercept, warnGB, fullGB, exhaustIdxWarn, exhaustLabelWarn, exhaustIdxFull, exhaustLabelFull, threshold };
+        
+        renderSummary(lastParsed);
+        renderChart(lastParsed);
+        document.getElementById("resultCard").classList.remove("hidden");
+    } catch (e) { alert("입력 데이터 형식을 확인해주세요."); }
+}
+
+function renderSummary(d) {
+    const container = document.getElementById("summaryBadges");
+    container.innerHTML = "";
+    const lastVal = d.values[d.values.length-1];
+    const items = [
+        { label: "Current Usage", value: `${lastVal.toFixed(1)} GB` },
+        { label: "Growth Rate", value: `${d.slope.toFixed(2)} GB` },
+        { label: `${d.threshold}% Reach`, value: d.exhaustLabelWarn || "Safe" },
+        { label: "Exhaustion Date", value: d.exhaustLabelFull || "Safe" }
+    ];
+    items.forEach(item => {
+        const div = document.createElement("div");
+        div.className = "p-4 rounded-xl bg-surface-container-low border border-outline-variant/10 shadow-sm";
+        div.innerHTML = `<p class="text-[9px] font-bold uppercase tracking-widest text-on-surface/40 mb-1">${item.label}</p><p class="text-lg font-bold text-on-surface">${item.value}</p>`;
+        container.appendChild(div);
+    });
+}
+
+function renderChart(d) {
+    if (chartInstance) chartInstance.destroy();
+    const ctx = document.getElementById("myChart").getContext("2d");
+    const n = d.values.length;
+
+    const actualData = d.predLabels.map((_, i) => i < n ? d.values[i] : null);
+    const predictData = d.predLabels.map((_, i) => i >= n - 1 ? (d.intercept + d.slope * i) : null);
+
+    chartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: d.predLabels,
+            datasets: [
+                { label: 'Actual', data: actualData, backgroundColor: '#2d3338', order: 2 },
+                { label: 'Forecast', data: predictData, type: 'line', borderColor: '#5f5e5f', borderDash: [5,5], pointRadius: 0, order: 1 }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                y: { grid: { color: '#f2f4f6' }, border: { display: false } },
+                x: { grid: { display: false }, border: { display: false } }
+            }
+        },
+        plugins: [{
+            id: 'callouts',
+            beforeDraw(chart) {
+                const { ctx, chartArea, scales: { x, y } } = chart;
+                
+                // 배경 음영 영역
+                if (d.warnGB && d.fullGB) {
+                    ctx.save();
+                    ctx.fillStyle = 'rgba(0,0,0,0.03)';
+                    const yWarn = y.getPixelForValue(d.warnGB);
+                    const yFull = y.getPixelForValue(d.fullGB);
+                    ctx.fillRect(chartArea.left, yFull, chartArea.width, yWarn - yFull);
+                    ctx.restore();
+                }
+
+                // 말풍선 그리기 (Custom Tooltip)
+                [ 
+                    { idx: d.exhaustIdxWarn, label: "증설 필요", sub: d.exhaustLabelWarn, color: "#5f5e5f" },
+                    { idx: d.exhaustIdxFull, label: "디스크 부족", sub: d.exhaustLabelFull, color: "#2d3338" }
+                ].forEach(point => {
+                    if (point.idx !== null) {
+                        const xi = x.getPixelForValue(point.idx);
+                        const yi = y.getPixelForValue(d.intercept + d.slope * point.idx);
+                        
+                        // 수직 가이드선
+                        ctx.save();
+                        ctx.setLineDash([4, 4]);
+                        ctx.strokeStyle = point.color;
+                        ctx.beginPath();
+                        ctx.moveTo(xi, yi);
+                        ctx.lineTo(xi, chartArea.bottom);
+                        ctx.stroke();
+
+                        // 말풍선 박스
+                        const bw = 80, bh = 40;
+                        const bx = xi - bw/2, by = chartArea.top + 10;
+                        
+                        ctx.fillStyle = point.color;
+                        roundRect(ctx, bx, by, bw, bh, 6);
+                        ctx.fill();
+
+                        ctx.fillStyle = "#ffffff";
+                        ctx.font = "bold 10px Inter";
+                        ctx.textAlign = "center";
+                        ctx.fillText(point.label, xi, by + 16);
+                        ctx.font = "9px Inter";
+                        ctx.fillText(point.sub, xi, by + 30);
+                        ctx.restore();
+                    }
+                });
+            }
+        }]
+    });
+}
+
+function roundRect(ctx, x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.quadraticCurveTo(x + w, y, x + w, y + r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
+    ctx.lineTo(x + r, y + h);
+    ctx.quadraticCurveTo(x, y + h, x, y + h - r);
+    ctx.lineTo(x, y + r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.closePath();
+}
+
+function downloadPNG() {
+    const a = document.createElement("a");
+    a.href = document.getElementById("myChart").toDataURL("image/png");
+    a.download = "disk_forecast.png"; a.click();
+}
+
+function downloadCSV() {
+    if(!lastParsed) return;
+    let csv = "Label,Usage(GB)\n";
+    lastParsed.predLabels.forEach((l, i) => {
+        const v = i < lastParsed.values.length ? lastParsed.values[i] : (lastParsed.intercept + lastParsed.slope * i);
+        csv += `${l},${v.toFixed(2)}\n`;
+    });
+    const blob = new Blob(["\uFEFF"+csv], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href=url; a.download="forecast.csv"; a.click();
+}
+</script>
+
+</body>
+</html>
